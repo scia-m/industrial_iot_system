@@ -1,0 +1,13 @@
+{
+  "broker": "rpi3.lan",
+  "port": 1883,
+  "client_id": "gateway-mqtt-service",
+  "username": "",
+  "password": "",
+  "keepalive": 60,
+  "topics": [
+    "factory/+/telemetry",
+    "factory/+/heartbeat",
+    "factory/+/status"
+  ]
+}
