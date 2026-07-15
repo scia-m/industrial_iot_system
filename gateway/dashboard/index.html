@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gateway Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; background: #f5f7fb; color: #222; }
+    h1, h2 { margin-bottom: 0.5rem; }
+    .card { background: white; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    th, td { border-bottom: 1px solid #e2e8f0; padding: 0.55rem; text-align: left; }
+    th { background: #eff4ff; }
+    .status { font-weight: bold; }
+    .status.online { color: green; }
+    .status.offline { color: #b91c1c; }
+    .status.unknown { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <h1>Gateway Dashboard</h1>
+  <div id="error" style="color: #b91c1c; display: none"></div>
+
+  <div class="card">
+    <h2>Devices</h2>
+    <table>
+      <thead>
+        <tr><th>Node</th><th>Firmware</th><th>Status</th><th>RSSI</th><th>Last Seen</th></tr>
+      </thead>
+      <tbody id="devices-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Measurements</h2>
+    <table>
+      <thead>
+        <tr><th>Node</th><th>Measurement</th><th>Value</th><th>Unit</th><th>Time</th></tr>
+      </thead>
+      <tbody id="measurements-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Events</h2>
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Node</th><th>Type</th><th>Message</th></tr>
+      </thead>
+      <tbody id="events-body"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const apiBase = window.location.origin.replace(/:\d+$/, ':8000');
+
+    async function loadData() {
+      const errorBox = document.getElementById('error');
+      errorBox.style.display = 'none';
+      try {
+        const [devicesRes, eventsRes] = await Promise.all([
+          fetch(`${apiBase}/devices`),
+          fetch(`${apiBase}/events`)
+        ]);
+        if (!devicesRes.ok || !eventsRes.ok) {
+          throw new Error('Failed to load gateway data');
+        }
+        const devices = await devicesRes.json();
+        const events = await eventsRes.json();
+        renderDevices(devices);
+        renderEvents(events);
+        await loadMeasurements(devices);
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.style.display = 'block';
+      }
+    }
+
+    function renderDevices(devices) {
+      const body = document.getElementById('devices-body');
+      body.innerHTML = '';
+      devices.forEach((device) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${device.node_id}</td>
+          <td>${device.firmware || '-'}</td>
+          <td class="status ${device.status || 'unknown'}">${device.status || 'unknown'}</td>
+          <td>${device.rssi ?? '-'}</td>
+          <td>${device.last_seen || '-'}</td>`;
+        body.appendChild(row);
+      });
+    }
+
+    async function loadMeasurements(devices) {
+      const body = document.getElementById('measurements-body');
+      body.innerHTML = '';
+      if (!devices.length) return;
+
+      const allMeasurements = [];
+      for (const device of devices) {
+        const response = await fetch(`${apiBase}/devices/${encodeURIComponent(device.node_id)}/measurements`);
+        if (!response.ok) continue;
+        const measurements = await response.json();
+        allMeasurements.push(...measurements);
+      }
+      allMeasurements.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+      allMeasurements.slice(0, 20).forEach((item) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${item.node_id}</td>
+          <td>${item.measurement_type}</td>
+          <td>${item.value}</td>
+          <td>${item.unit || '-'}</td>
+          <td>${item.created_at}</td>`;
+        body.appendChild(row);
+      });
+    }
+
+    function renderEvents(events) {
+      const body = document.getElementById('events-body');
+      body.innerHTML = '';
+      events.slice(0, 20).forEach((event) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${event.created_at}</td>
+          <td>${event.node_id || '-'}</td>
+          <td>${event.event_type}</td>
+          <td>${event.message}</td>`;
+        body.appendChild(row);
+      });
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
